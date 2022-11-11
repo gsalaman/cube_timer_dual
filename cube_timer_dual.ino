@@ -25,26 +25,45 @@
  *   15 to 5V
  *   16 to GND
  *====================*/
- // NEEDS TO BE UPDATED FOR AT LEAST 2, MAYBE 3 LCDS!
+ // NEEDS TO BE UPDATED FOR AT LEAST 2, MAYBE 3 LCDS...but for now, all go to serial.
+#if 0
 #define LCD_D7         4 
 #define LCD_D6         5
 #define LCD_D5         6
 #define LCD_D4         7
 #define LCD_ENABLE     8
 #define LCD_REG_SEL    9
-
 // Our LCD has 2 rows of 16 characters.
 #define LCD_CHARS 16
 #define LCD_ROWS 2
-
 LiquidCrystal lcd(LCD_REG_SEL, LCD_ENABLE, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+#endif
 
-// and we need a ton ore pins...
-#define RH_PIN    10
-#define LH_PIN    11
-#define RESET_PIN 12
+#define P1_RH_PIN    22
+#define P1_LH_PIN    23
+#define P2_RH_PIN    52
+#define P2_LH_PIN    53
+#define RESET_PIN    12
 
 uint32_t start_time;
+uint32_t pre_inspect_start;
+#define PRE_INSPECT_MS 3000
+uint32_t inspect_start_ms;
+uint32_t last_inspect_sec;
+#define INSPECT_SEC 15
+#define INSPECT_MS (INSPECT_SEC * 1000)
+
+uint32_t handicap_ms = 0;
+
+
+typedef enum
+{
+  PLAYER_NONE,
+  PLAYER1,
+  PLAYER2
+} player_type;
+
+player_type winner = PLAYER_NONE;
 
 typedef enum
 {
@@ -110,7 +129,7 @@ proc_func_type proc_func[] =
  =================================================================*/
 void init_idle_state( void )
 {
-
+  Serial.println("Entering Idle");
   
 }  /* end of init_idle_state */
 
@@ -128,7 +147,8 @@ void init_offline_state( void )
  =================================================================*/
 void init_pre_inspect_state( void )
 {
-
+  Serial.println("Entering Pre-inspect");
+  pre_inspect_start = millis();
   
 }  /* end of init_pre_inspect_state */
 
@@ -138,7 +158,9 @@ void init_pre_inspect_state( void )
  =================================================================*/
 void init_inspect_state( void )
 {
-
+  Serial.println("Entering inspect");
+  inspect_start_ms = millis();
+  last_inspect_sec = 0;  // this will force a print on the first state processor
   
 }  /* end of init_inspect_state */
 
@@ -165,23 +187,58 @@ void init_run_both_state( void )
  =================================================================*/
 void init_show_winner_state( void )
 {
-
+  Serial.print("WINNER: ");
+  if (winner == PLAYER1)
+  {
+    Serial.println("Player 1");
+  }
+  else if (winner == PLAYER2)
+  {
+    Serial.println("Player 2");
+  }
+  else
+  {
+    Serial.println("ERROR");
+  }
   
 }  /* end of init_show_winner_state */
 
 /*=================================================================
  * process_idle_state
  * 
- *
+ * In the idle state, we are looking for two things:
+ *  - an indicator to go to offline, where we set various parameters
+ *  - an indicator that both players are ready...shown by all player 
+ *    buttons being pressed.
  =================================================================*/
 state_type process_idle_state( void )
 {
-  
+  int p1r;
+  int p1l;
+  int p2r;
+  int p2l;
+
+  p1r = digitalRead(P1_RH_PIN);
+  p1l = digitalRead(P1_LH_PIN);
+  p2r = digitalRead(P2_RH_PIN);
+  p2l = digitalRead(P2_LH_PIN);
+
+  if ( (p1r == LOW) && (p1l == LOW) && (p2r == LOW)&& (p2l == LOW) )
+  {
+    return STATE_PRE_INSPECT;
+  }
+  else
+  {
+    return STATE_IDLE;
+  }
   
 }  /* end of process_idle_state */
 
 /*=================================================================
  * process_offline_state
+ * 
+ * Currently unimplemented.  We'll eventually use this to set handicaps
+ * and inspect times.
  * 
  =================================================================*/
 state_type process_offline_state( void )
@@ -192,27 +249,112 @@ state_type process_offline_state( void )
 /*=================================================================
  * process_pre_inspect_state
  * 
+ * In the pre-inspect state, we're counting down for inspect to begin.
+ * If anyone takes their hands off the buttons early, it's an insta-loss.
+ * If the countdown expires, we go to inspect.
+ * 
  =================================================================*/
 state_type process_pre_inspect_state( void )
 {
 
-  
+  int p1r;
+  int p1l;
+  int p2r;
+  int p2l;
+  uint32_t current_ms;
+
+  // if anyone takes their hands off a button, it's an insta-win for the other
+  p1r = digitalRead(P1_RH_PIN);
+  p1l = digitalRead(P1_LH_PIN);
+  p2r = digitalRead(P2_RH_PIN);
+  p2l = digitalRead(P2_LH_PIN);  
+
+  if (p1r || p1l)
+  {
+    winner = PLAYER2;
+    return STATE_SHOW_WINNER;
+  }
+
+  if (p2r || p2l)
+  {
+    winner = PLAYER1;
+    return STATE_SHOW_WINNER;
+  }
+
+  // keep counting down 
+  current_ms = millis();
+  if (current_ms > pre_inspect_start + PRE_INSPECT_MS)
+  {
+    return STATE_INSPECT;
+  }
+
+  // kinda gross right now...show a timestamp.   In future, just make this each second.
+  Serial.println(pre_inspect_start + PRE_INSPECT_MS - current_ms);
+  return STATE_PRE_INSPECT;
+    
 }  /* end of process_pre_inspect_state */
 
 
 /*=================================================================
  * process_inspect_state
  * 
+ * In the inspect state, both players are allowed to take their hands
+ * off of the buttons and check out the cube.  They'll need to put their
+ * hands back on the buttons before inspect is over, but we won't be checking
+ * that here.
+ * 
+ * Our only transition is that if the timer expires, we go to either "run both"
+ * (if no HC is set) or "run hc only" (if there is an HC set).
+ * 
  =================================================================*/
 state_type process_inspect_state( void )
 { 
+  uint32_t current_ms;
+  uint32_t elapsed_sec;
+
+  current_ms = millis();
+
+  // has our timer run out?
+  if (current_ms > inspect_start_ms + INSPECT_MS)
+  {
+    // if there's a handicap in place, we're going to only run one
+    if (handicap_ms)
+    { 
+      return STATE_RUN_HC_ONLY;
+    }
+    
+    // if not, we run both
+    else
+    {
+      return STATE_RUN_BOTH;
+    }
+  }
+
+  // if not, we only want to show time deltas on second transitions
   
+  // how many seconds have elapsed since inspect began?
+  elapsed_sec = (current_ms - inspect_start_ms) / 1000;
+  if (elapsed_sec != last_inspect_sec)
+  {
+    Serial.println(INSPECT_SEC - elapsed_sec);
+  }
+
+  return STATE_INSPECT;
   
 }  /* end of process_inspect_state */
 
 
 /*=================================================================
  * process_run_hc_only_state
+ * 
+ * In this state, only the un-handicapped player may take their hands off
+ * the buttons and solve.  
+ * 
+ * Transitions:
+ *   - if the handicapped player takes their hands off too soon, it's an insta-win
+ *   - if the un-handicapped player puts their hands BACK on the buttons, it's a win for them.
+ *     (and handicaps probably need to be readjusted...they won without the other player 
+ *     getting a chance)
  * 
  =================================================================*/
 state_type process_run_hc_only_state( void )
@@ -225,16 +367,20 @@ state_type process_run_hc_only_state( void )
 /*=================================================================
  * process_run_both_state
  * 
+ * So now both players are solving.  Just one check...did a player press
+ * both buttons?  That's a win. 
+ * 
  =================================================================*/
 state_type process_run_both_state( void )
 { 
-  
   
 }  /* end of process_run_both_state */
 
 
 /*=================================================================
  * process_show_winner_state
+ * 
+ * Show who won.  Only exit is hitting the reset button, going to idle
  * 
  =================================================================*/
 state_type process_show_winner_state( void )
@@ -247,14 +393,18 @@ void setup( void )
 {
   Serial.begin(9600);
 
-  // TODO:  add pins
-  pinMode(RH_PIN, INPUT_PULLUP);
-  pinMode(LH_PIN, INPUT_PULLUP);
+
+  pinMode(P1_RH_PIN, INPUT_PULLUP);
+  pinMode(P1_LH_PIN, INPUT_PULLUP);
+  pinMode(P2_RH_PIN, INPUT_PULLUP);
+  pinMode(P2_LH_PIN, INPUT_PULLUP);
   pinMode(RESET_PIN, INPUT_PULLUP);
 
   // TODO:  multiple LCDS
+  #if 0
   lcd.begin(LCD_CHARS, LCD_ROWS);
   lcd.clear();
+  #endif
   
   init_idle_state();
   
