@@ -52,18 +52,24 @@ uint32_t inspect_start_ms;
 uint32_t last_inspect_sec;
 #define INSPECT_SEC 15
 #define INSPECT_MS (INSPECT_SEC * 1000)
+uint32_t handicap_end_ms=0;
+uint32_t handicap_ms = 5000;   // Starting with a hardcoded 5 sec handicap for testing.
+uint32_t last_handicap_sec;
 
-uint32_t handicap_ms = 0;
 
 
 typedef enum
 {
   PLAYER_NONE,
   PLAYER1,
-  PLAYER2
+  PLAYER2,
+  PLAYER_BOTH  // we're gonna use this for ties...
 } player_type;
 
 player_type winner = PLAYER_NONE;
+
+player_type handicapped_player = PLAYER1;  // hardcode for initial testing
+player_type non_hc_player = PLAYER2;
 
 typedef enum
 {
@@ -169,7 +175,14 @@ void init_inspect_state( void )
  =================================================================*/
 void init_run_hc_only_state( void )
 {
+  Serial.println("Starting HC-only countdown");
 
+  // Hmmm...start time should really be broken into a start time per player....and it should 
+  // be set in the procesing function rather than the entry function...
+  start_time = millis();
+  
+  // grab a timestamp for when the second player can start
+  handicap_end_ms = handicap_ms + start_time;
   
 }  /* end of init_run_hc_only_state */
 
@@ -195,6 +208,10 @@ void init_show_winner_state( void )
   else if (winner == PLAYER2)
   {
     Serial.println("Player 2");
+  }
+  else if (winner = PLAYER_BOTH)
+  {
+    Serial.println("TIE!!!");
   }
   else
   {
@@ -359,6 +376,75 @@ state_type process_inspect_state( void )
  =================================================================*/
 state_type process_run_hc_only_state( void )
 { 
+  int r; // Right button result
+  int l; // Left button result
+  uint32_t current_ms;
+  uint32_t current_handicap_sec;
+
+  // did the non-handicapped player get a solve in?
+  if (non_hc_player == PLAYER1)
+  {
+    r = digitalRead(P1_RH_PIN);
+    l = digitalRead(P1_LH_PIN);
+  }
+  else if (non_hc_player == PLAYER2)
+  {
+    r = digitalRead(P2_RH_PIN);
+    l = digitalRead(P2_LH_PIN);
+  }
+  else
+  {
+    Serial.println("Error...invalid Non-hc player!!!");
+    return STATE_IDLE;
+  }
+
+  if ((r == LOW) && (l == LOW))
+  {
+    Serial.println("Solve!!!");
+    winner = non_hc_player;
+    return STATE_SHOW_WINNER;
+  }
+  
+  // check our time...are we good to transition?
+  current_ms = millis();
+  if (current_ms > handicap_end_ms)
+  {
+    return (STATE_RUN_BOTH);
+  }
+  
+  // make sure the handicapped player is still holding both buttons
+  if (handicapped_player == PLAYER1)
+  {
+    r = digitalRead(P1_RH_PIN);
+    l = digitalRead(P1_LH_PIN);
+  }
+  else if (handicapped_player == PLAYER2)
+  {
+    r = digitalRead(P2_RH_PIN);
+    l = digitalRead(P2_LH_PIN);
+  }
+  else
+  {
+    Serial.println("Error with HC Player!!!");
+    return STATE_IDLE;
+  }
+
+  if ((r == HIGH) || (l == HIGH))
+  {
+    Serial.println("HC player took hands off too early!");
+    winner = non_hc_player;
+    return STATE_SHOW_WINNER;
+  }
+
+  // At this point, we're good to keep going.  Update the times.
+  current_handicap_sec = (handicap_end_ms - current_ms) / 1000;
+  if (current_handicap_sec != last_handicap_sec)
+  {
+    Serial.print(current_handicap_sec);
+    Serial.println(" seconds left on HC");
+    last_handicap_sec = current_handicap_sec;
+  }
+  return(STATE_RUN_HC_ONLY);
   
   
 }  /* end of process_run_hc_only_state */
@@ -373,6 +459,47 @@ state_type process_run_hc_only_state( void )
  =================================================================*/
 state_type process_run_both_state( void )
 { 
+  int p1r;
+  int p1l;
+  int p2r;
+  int p2l;
+  uint32_t current_ms;
+  uint32_t ms_elapsed;
+
+  // Check for a winner
+  p1r = digitalRead(P1_RH_PIN);
+  p1l = digitalRead(P1_LH_PIN);
+  p2r = digitalRead(P2_RH_PIN);
+  p2l = digitalRead(P2_LH_PIN);
+
+  // First case should be very rare.  Do we have a tie?
+  if ((p1r == LOW) && (p1l == LOW) && (p2r == LOW) && (p2r == LOW))
+  {
+    winner = PLAYER_BOTH;
+    return(STATE_SHOW_WINNER);
+  }
+  
+  // okay, no tie.  Did P1 win?
+  if ((p1r == LOW) && (p1l == LOW))
+  {
+    winner = PLAYER1;
+    return(STATE_SHOW_WINNER);
+  }
+  
+  // What about P2?
+  if ((p2r == LOW) && (p2l == LOW))
+  {
+    winner = PLAYER2;
+    return(STATE_SHOW_WINNER);
+  }
+
+  // If we get here, no one has won yet.  Update the timers.
+  // We're gonna want to change this eventually to reflect the handicaps, but we'll just show 
+  // absolute run for now.
+  current_ms = millis();
+  ms_elapsed = current_ms - start_time;
+  Serial.println(ms_elapsed);
+
   
 }  /* end of process_run_both_state */
 
