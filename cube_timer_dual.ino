@@ -71,6 +71,9 @@ player_type winner = PLAYER_NONE;
 player_type handicapped_player = PLAYER1;  // hardcode for initial testing
 player_type non_hc_player = PLAYER2;
 
+boolean p1_began_solve = false;
+boolean p2_began_solve = false;
+
 typedef enum
 {
   STATE_IDLE,        // waiting for both players to be ready
@@ -381,28 +384,43 @@ state_type process_run_hc_only_state( void )
   uint32_t current_ms;
   uint32_t current_handicap_sec;
 
-  // did the non-handicapped player get a solve in?
+  // has the non-handicapped player began their solve yet?
   if (non_hc_player == PLAYER1)
   {
     r = digitalRead(P1_RH_PIN);
     l = digitalRead(P1_LH_PIN);
+    if ((r==HIGH) && (l==HIGH))
+    {
+      p1_began_solve = true;
+    }
+    // did the non-hc player get a solve in?
+    else if ((p1_began_solve) && (r == LOW) && (l == LOW))
+    {
+      Serial.println("Solve!!!");
+      winner = non_hc_player;
+      return STATE_SHOW_WINNER;
+    }
   }
   else if (non_hc_player == PLAYER2)
   {
     r = digitalRead(P2_RH_PIN);
     l = digitalRead(P2_LH_PIN);
+    if ((r==HIGH) && (l==HIGH))
+    {
+      p2_began_solve = true;
+    }
+    // did the non-hc player get a solve in?
+    else if ((p2_began_solve) && (r == LOW) && (l == LOW))
+    {
+      Serial.println("Solve!!!");
+      winner = non_hc_player;
+      return STATE_SHOW_WINNER;
+    }
   }
   else
   {
     Serial.println("Error...invalid Non-hc player!!!");
     return STATE_IDLE;
-  }
-
-  if ((r == LOW) && (l == LOW))
-  {
-    Serial.println("Solve!!!");
-    winner = non_hc_player;
-    return STATE_SHOW_WINNER;
   }
   
   // check our time...are we good to transition?
@@ -512,8 +530,16 @@ state_type process_run_both_state( void )
  =================================================================*/
 state_type process_show_winner_state( void )
 { 
-  
-  
+
+  // if the reset button has been pressed, we can go to idle
+  if (digitalRead(RESET_PIN) == LOW)
+  {
+    return STATE_IDLE;
+  }
+  else
+  {
+    return STATE_SHOW_WINNER;
+  }
 }  /* end of process_show_winner_state */
 
 void setup( void )
