@@ -1,5 +1,9 @@
 # cube_timer_dual
 
+## second level header
+
+### third level header
+
 So now that I have one timer working, it's time (heh) to think about the racing setup.  
 Here are some loose requirements/operational description:
 
