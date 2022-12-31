@@ -2,5 +2,5 @@
 
 * bullet list
 * is cool
-* * sub bullet
-* * sub bullet
+  * sub bullet 
+  * sub bullet
