@@ -80,7 +80,9 @@ typedef enum
   STATE_OFFLINE,     // Set handicaps and inspect
   STATE_PRE_INSPECT, // countdown before inspect begins
   STATE_INSPECT,     // both players allowed to inspect cube
+  STATE_HC_WFR,      // waiting for hc player to release their buttons
   STATE_RUN_HC_ONLY, // only the handicapped player is allowed to solve
+  STATE_NCH_WFR,     // waiting for the non-handicapped player to release their buttons
   STATE_RUN_BOTH,    // both players solving
   STATE_SHOW_WINNER  // Someone has solved!
 } state_type;
@@ -92,7 +94,9 @@ void init_idle_state( void );
 void init_offline_state( void );
 void init_pre_inspect_state( void );
 void init_inspect_state( void );
+void init_hc_wfr_state( void );
 void init_run_hc_only_state( void );
+void init_nhc_wfr_state( void );
 void init_run_both_state( void );
 void init_show_winner_state( void );
 
@@ -101,7 +105,9 @@ state_type process_idle_state( void );
 state_type process_offline_state( void );
 state_type process_pre_inspect_state( void );
 state_type process_inspect_state( void );
+state_type process_hc_wfr( void );
 state_type process_run_hc_only_state( void );
+state_type process_nhc_wfr( void );
 state_type process_run_both_state( void );
 state_type process_show_winner_state( void );
 
@@ -115,7 +121,9 @@ init_func_type init_func[] =
   init_offline_state,
   init_pre_inspect_state,
   init_inspect_state,
+  init_hc_wfr_state,
   init_run_hc_only_state,
+  init_nhc_wfr_state,
   init_run_both_state,
   init_show_winner_state
 };
@@ -127,7 +135,9 @@ proc_func_type proc_func[] =
   process_offline_state,
   process_pre_inspect_state,
   process_inspect_state,
+  process_hc_wfr_state,
   process_run_hc_only_state,
+  process_nhc_wfr_state,
   process_run_both_state,
   process_show_winner_state
 };
@@ -174,6 +184,14 @@ void init_inspect_state( void )
 }  /* end of init_inspect_state */
 
 /*=================================================================
+ * init_hc_wfr_state
+ =================================================================*/
+void init_hc_wfr_state( void )
+{
+  Serial.println("Entering hc wait-for-release");
+}
+
+/*=================================================================
  * init_run_hc_only_state
  =================================================================*/
 void init_run_hc_only_state( void )
@@ -189,6 +207,14 @@ void init_run_hc_only_state( void )
   
 }  /* end of init_run_hc_only_state */
 
+/*=================================================================
+ * init_nhc_wfr_state
+ =================================================================*/
+void init_nhc_wfr_state( void )
+{
+  Sereial.println("entering nhc wait-for-release");
+  
+}
 /*=================================================================
  * init_run_both_state
  =================================================================*/
@@ -323,8 +349,8 @@ state_type process_pre_inspect_state( void )
  * hands back on the buttons before inspect is over, but we won't be checking
  * that here.
  * 
- * Our only transition is that if the timer expires, we go to either "run both"
- * (if no HC is set) or "run hc only" (if there is an HC set).
+ * Our only transition is that if the timer expires, we go to either "run hc only" 
+ * (if there is an HC set) or ....HMMMM....NEED TO FIGURE FLOW FOR NO HC!!!
  * 
  =================================================================*/
 state_type process_inspect_state( void )
@@ -340,10 +366,11 @@ state_type process_inspect_state( void )
     // if there's a handicap in place, we're going to only run one
     if (handicap_ms)
     { 
-      return STATE_RUN_HC_ONLY;
+      return STATE_HC_WFR;
     }
     
     // if not, we run both
+    //  GLENN: RETHINK THIS!!!
     else
     {
       return STATE_RUN_BOTH;
@@ -363,6 +390,20 @@ state_type process_inspect_state( void )
   
 }  /* end of process_inspect_state */
 
+/*=================================================================
+ * process_hc_wfr
+ * 
+ * In this state, the solve for the HC player has officially started...and we're waiting for them
+ * to take their hands off the buttons.
+ * 
+ * Transitions:
+ *   
+ * 
+ =================================================================*/
+state_type process_hc_wfr( void )
+{
+  
+}
 
 /*=================================================================
  * process_run_hc_only_state
