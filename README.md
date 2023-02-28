@@ -34,3 +34,7 @@ Okay, so next steps:
 * Controller State Machine
 * Console State Machine
 * Start with hardwired signals...can I use ATTINY?
+
+## Overall Arch notes
+* The controller is responsible for dealing with handicaps.  It will tell each player when they should start Inspect (maybe with a 3s countdown warning?)
+* Each player is responsible for keeping track of their inspect timer and internal solve state.  They can send a fail if buttons are released to early or a success on solve.
