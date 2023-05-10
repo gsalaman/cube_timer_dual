@@ -47,6 +47,11 @@ we could have a "stop" command here...but I'm gonna start by trying without it
 * Done:  from console to controller.  We're done!
 
 ## Ladder diagrams needed
+* 10s HC, standard solve
+* one player's inspect took too long
+* BOTH player's inspect took too long
+* 10s HC, early release
+* 10s HC, solve before HC timer starts
 
 ## Design considerations:
 * If someone solves, the other player keeps going until done...they can either choose to solve (which will give the delta time), or hit both buttons to give a done signal (but one that counts as DNF)
